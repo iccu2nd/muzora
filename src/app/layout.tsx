@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Muzora",
-  description: "Fast music streaming — inspired by SimpMusic",
+  description: "Fast music streaming",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0a0a0a",
+  themeColor: "#0f0f0f",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
@@ -27,6 +27,14 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="dark">
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+          rel="stylesheet"
+        />
+      </head>
       <body className="antialiased bg-[var(--bg)] text-white min-h-screen">
         {children}
       </body>

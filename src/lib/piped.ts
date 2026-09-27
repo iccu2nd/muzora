@@ -102,7 +102,7 @@ export async function getStream(videoId: string): Promise<StreamResult> {
   // Fallback: no direct audio stream available (YouTube blocking)
   // Return metadata only — player will use YouTube embed
   return {
-    title: data?.title || "YouTube Track",
+    title: data?.title || "",
     uploader: data?.uploader || "",
     thumbnail: data?.thumbnailUrl || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
     duration: data?.duration || 0,

@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
     console.error(e);
     // Even on total failure, return videoId so embed can still work
     return NextResponse.json({
-      title: "YouTube Track",
+      title: "",
       uploader: "",
       thumbnail: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
       duration: 0,
