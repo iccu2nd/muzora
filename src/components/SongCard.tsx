@@ -38,7 +38,7 @@ export default function SongCard({
         />
         <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
           <div className="w-12 h-12 rounded-full bg-[var(--primary)] flex items-center justify-center shadow-lg">
-            <PlayIcon size={22} fill="white" className="text-white ml-0.5" />
+            <PlayIcon size={22} className="text-white ml-0.5" />
           </div>
         </div>
         {duration ? (
