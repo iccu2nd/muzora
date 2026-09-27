@@ -1,30 +1,55 @@
-// Piped instances for YouTube proxy (public, no API key needed)
+// Piped instances (public YouTube API proxies)
+// Updated with currently working instances
 const PIPED_INSTANCES = [
-  "https://pipedapi.kavin.rocks",
-  "https://pipedapi.tokhmi.xyz",
   "https://api.piped.private.coffee",
+  "https://pipedapi.ducks.party",
+  "https://pipedapi.kavin.rocks",
   "https://pipedapi.adminforge.de",
-  "https://piped-api.garudalinux.org",
+  "https://pipedapi.leptons.xyz",
+  "https://pipedapi.reallyaweso.me",
+  "https://pipedapi.nosebs.ru",
+  "https://api.piped.yt",
 ];
 
 let currentInstance = 0;
 
-async function fetchWithFallback(path: string, retries = 3): Promise<any> {
-  for (let i = 0; i < retries; i++) {
-    const base = PIPED_INSTANCES[(currentInstance + i) % PIPED_INSTANCES.length];
+async function fetchWithFallback(path: string, retries = 6): Promise<any> {
+  const errors: string[] = [];
+  const start = currentInstance;
+
+  for (let i = 0; i < Math.min(retries, PIPED_INSTANCES.length); i++) {
+    const idx = (start + i) % PIPED_INSTANCES.length;
+    const base = PIPED_INSTANCES[idx];
     try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 8000);
+
       const res = await fetch(`${base}${path}`, {
-        headers: { Accept: "application/json" },
-        next: { revalidate: 60 },
+        headers: {
+          Accept: "application/json",
+          "User-Agent": "Muzora/1.0",
+        },
+        signal: controller.signal,
+        next: { revalidate: 30 },
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      currentInstance = (currentInstance + i) % PIPED_INSTANCES.length;
-      return await res.json();
-    } catch (e) {
-      console.warn(`Piped instance ${base} failed:`, e);
+      clearTimeout(timeout);
+
+      if (!res.ok) {
+        errors.push(`${base}: HTTP ${res.status}`);
+        continue;
+      }
+
+      const data = await res.json();
+      // success — remember this instance for next time
+      currentInstance = idx;
+      return data;
+    } catch (e: any) {
+      errors.push(`${base}: ${e.name === "AbortError" ? "timeout" : e.message}`);
     }
   }
-  throw new Error("All Piped instances failed");
+
+  console.error("All Piped instances failed:", errors);
+  throw new Error("All Piped instances failed. Coba lagi nanti.");
 }
 
 export interface SearchItem {
@@ -73,7 +98,9 @@ export async function search(query: string, filter = "music_songs"): Promise<Sea
   const data = await fetchWithFallback(
     `/search?q=${encodeURIComponent(query)}&filter=${filter}`
   );
-  return (data.items || []).filter((i: any) => i.type === "stream" || i.url?.includes("/watch"));
+  return (data.items || []).filter(
+    (i: any) => i.type === "stream" || (i.url && i.url.includes("/watch"))
+  );
 }
 
 export async function getStream(videoId: string): Promise<StreamInfo> {
@@ -81,7 +108,6 @@ export async function getStream(videoId: string): Promise<StreamInfo> {
 }
 
 export function extractVideoId(url: string): string | null {
-  // Handles /watch?v=ID or just ID
   if (!url) return null;
   if (url.length === 11 && !url.includes("/")) return url;
   const match = url.match(/(?:v=|\/)([0-9A-Za-z_-]{11})/);
