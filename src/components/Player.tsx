@@ -448,7 +448,7 @@ export default function Player({
                 <MinimizeIcon size={20} />
               </button>
               <p className="text-[11px] text-white/40 uppercase tracking-[0.2em]">
-                {showLyrics ? "Lyrics" : "Now Playing"}
+                {showLyrics ? "Lyrics" : "SEDANG DIPUTAR"}
               </p>
               <div className="flex items-center gap-1">
                 <button
@@ -489,7 +489,7 @@ export default function Player({
                 className="flex-1 overflow-y-auto no-scrollbar py-6 px-2"
               >
                 {lyricsLoading ? (
-                  <div className="flex justify-center py-16 text-white/40 text-sm">Loading lyrics...</div>
+                  <div className="flex justify-center py-16 text-white/40 text-sm">Memuat lirik...</div>
                 ) : lyricsSynced.length > 0 ? (
                   <div className="space-y-5 pb-20">
                     {lyricsSynced.map((line, i) => (
@@ -515,7 +515,7 @@ export default function Player({
                 ) : (
                   <div className="flex flex-col items-center justify-center py-16 text-white/40 text-sm gap-2">
                     <span>🎤</span>
-                    <p>Lyrics not found</p>
+                    <p>Lirik tidak ditemukan</p>
                   </div>
                 )}
               </div>
@@ -659,7 +659,7 @@ export default function Player({
     <>
       {mediaHosts}
       <div
-        className="fixed bottom-[78px] left-2 right-2 z-50 rounded-xl overflow-hidden glass-strong shadow-2xl"
+        className="fixed bottom-[72px] left-3 right-3 z-50 rounded-full overflow-hidden bg-[#1c1c1e]/95 backdrop-blur-xl border border-white/[0.06] shadow-2xl"
         onClick={() => setExpanded(true)}
       >
         <div className="flex items-center gap-3 p-2.5">
@@ -673,15 +673,23 @@ export default function Player({
               <span className="text-[10px] text-[var(--primary)] mr-1">{formatSleep(sleepLeft)}</span>
             )}
             <button
+              onClick={handleLike}
+              className="w-9 h-9 rounded-full flex items-center justify-center text-white/70"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill={liked ? "#6eb6ff" : "none"} stroke={liked ? "#6eb6ff" : "currentColor"} strokeWidth="2">
+                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+              </svg>
+            </button>
+            <button
               onClick={togglePlay}
-              className="w-10 h-10 rounded-full flex items-center justify-center hover:bg-white/10"
+              className="w-10 h-10 rounded-full bg-[var(--accent)] text-black flex items-center justify-center ml-0.5"
             >
               {loading ? (
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
               ) : playing ? (
-                <PauseIcon size={22} />
+                <PauseIcon size={20} />
               ) : (
-                <PlayIcon size={22} className="ml-0.5" />
+                <PlayIcon size={20} className="ml-0.5" />
               )}
             </button>
           </div>

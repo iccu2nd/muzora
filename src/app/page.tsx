@@ -4,9 +4,9 @@ import { useState, useCallback, useEffect } from "react";
 import {
   SearchIcon,
   MusicIcon,
-  LoaderIcon,
   HomeIcon,
-  CompassIcon,
+  LibraryIcon,
+  LoaderIcon,
 } from "@/components/Icons";
 import Player, { Track } from "@/components/Player";
 import { extractVideoId, formatDuration } from "@/lib/piped";
@@ -30,15 +30,27 @@ interface SearchResult {
   views?: number;
 }
 
-const CHIPS = ["Relax", "Sleep", "Focus", "Sad", "Party", "Workout", "Chill", "Jazz"];
+const MOOD_CHIPS = [
+  { id: "all", label: "Semua" },
+  { id: "relax", label: "Santai", q: "chill relax music" },
+  { id: "sleep", label: "Tidur", q: "sleep music" },
+  { id: "energy", label: "Energik", q: "energetic workout music" },
+  { id: "sad", label: "Sedih", q: "sad songs" },
+  { id: "romance", label: "Romantis", q: "romantic love songs" },
+];
 
-const QUICK_MOODS = [
-  { title: "Commute", color: "#E91E63" },
-  { title: "Party", color: "#FF9800" },
-  { title: "K-Pop", color: "#9C27B0" },
-  { title: "Focus", color: "#00BCD4" },
-  { title: "1990s", color: "#FF5722" },
-  { title: "Chill", color: "#E91E8C" },
+const CATEGORIES = [
+  { title: "Bepergian", color: "linear-gradient(135deg,#1de9b6,#00bcd4)", q: "travel music" },
+  { title: "Fokus", color: "linear-gradient(135deg,#7c4dff,#536dfe)", q: "focus study music" },
+  { title: "Gaming", color: "linear-gradient(135deg,#76ff03,#00e676)", q: "gaming music" },
+  { title: "Merasa senang", color: "linear-gradient(135deg,#ff7043,#ff5252)", q: "happy upbeat music" },
+  { title: "Olah Raga", color: "linear-gradient(135deg,#c6ff00,#76ff03)", q: "workout music" },
+  { title: "Pesta", color: "linear-gradient(135deg,#ff4081,#f50057)", q: "party music" },
+  { title: "Romantis", color: "linear-gradient(135deg,#7c4dff,#e040fb)", q: "romantic songs" },
+  { title: "Santai", color: "linear-gradient(135deg,#e040fb,#ff4081)", q: "chill music" },
+  { title: "Sedih", color: "linear-gradient(135deg,#ff80ab,#f48fb1)", q: "sad songs" },
+  { title: "Semangat!", color: "linear-gradient(135deg,#b2ff59,#69f0ae)", q: "motivational music" },
+  { title: "Tidur", color: "linear-gradient(135deg,#69f0ae,#00e5ff)", q: "sleep music" },
 ];
 
 type Tab = "home" | "search" | "library";
@@ -49,6 +61,7 @@ export default function HomePage() {
   const [tab, setTab] = useState<Tab>("home");
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
+  const [homeResults, setHomeResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [current, setCurrent] = useState<Track | null>(null);
@@ -56,7 +69,7 @@ export default function HomePage() {
   const [queueIndex, setQueueIndex] = useState(0);
   const [expanded, setExpanded] = useState(false);
   const [showQueue, setShowQueue] = useState(false);
-  const [greeting, setGreeting] = useState("Good evening");
+  const [greeting, setGreeting] = useState("Selamat malam");
   const [shuffle, setShuffle] = useState(false);
   const [repeat, setRepeat] = useState<RepeatMode>("off");
   const [history, setHistory] = useState<Track[]>([]);
@@ -68,13 +81,15 @@ export default function HomePage() {
   const [newPlName, setNewPlName] = useState("");
   const [showAddToPl, setShowAddToPl] = useState(false);
   const [trackToAdd, setTrackToAdd] = useState<Track | null>(null);
-  const [activeChip, setActiveChip] = useState<string | null>(null);
+  const [mood, setMood] = useState("all");
+  const [libTab, setLibTab] = useState(0);
 
   useEffect(() => {
     const h = new Date().getHours();
-    if (h < 12) setGreeting("Good morning");
-    else if (h < 18) setGreeting("Good afternoon");
-    else setGreeting("Good evening");
+    if (h < 11) setGreeting("Selamat pagi");
+    else if (h < 15) setGreeting("Selamat siang");
+    else if (h < 18) setGreeting("Selamat sore");
+    else setGreeting("Selamat malam");
     refreshLibrary();
   }, []);
 
@@ -88,23 +103,29 @@ export default function HomePage() {
     if (tab === "library") refreshLibrary();
   }, [tab]);
 
-  const doSearch = useCallback(async (q: string) => {
+  const doSearch = useCallback(async (q: string, forHome = false) => {
     if (!q.trim()) return;
     setLoading(true);
     setError(null);
-    setTab("search");
+    if (!forHome) setTab("search");
     try {
       const res = await fetch(`/api/search?q=${encodeURIComponent(q)}&filter=music_songs`);
       const data = await res.json();
       if (data.error) throw new Error(data.error);
-      setResults(data.items || []);
+      const items = data.items || [];
+      if (forHome) setHomeResults(items);
+      else setResults(items);
     } catch (e: any) {
-      setError(e.message || "Search failed");
-      setResults([]);
+      setError(e.message || "Gagal mencari");
+      if (!forHome) setResults([]);
     } finally {
       setLoading(false);
     }
   }, []);
+
+  useEffect(() => {
+    doSearch("trending indonesia music", true);
+  }, [doSearch]);
 
   const playTrack = useCallback(
     async (item: SearchResult | Track, customQueue?: Track[]) => {
@@ -115,7 +136,7 @@ export default function HomePage() {
       try {
         const res = await fetch(`/api/stream?id=${encodeURIComponent(id)}`);
         const data = await res.json();
-        if (data.error && !data.videoId) throw new Error(data.error || "Playback failed");
+        if (data.error && !data.videoId) throw new Error(data.error || "Gagal memutar");
         const itemTitle = "title" in item ? item.title : (item as Track).title;
         const itemUploader = "uploaderName" in item ? item.uploaderName : (item as Track).uploader;
         const apiTitle = data.title && data.title !== "YouTube Track" ? data.title : null;
@@ -128,12 +149,12 @@ export default function HomePage() {
           audioUrl: data.audioUrl || null,
         };
         setCurrent(track);
-
         if (customQueue) {
           setQueue(customQueue);
           setQueueIndex(Math.max(0, customQueue.findIndex((t) => t.id === id)));
         } else if ("url" in item) {
-          const q = results.map((r) => ({
+          const source = tab === "home" ? homeResults : results;
+          const q = source.map((r) => ({
             id: extractVideoId(r.url) || r.url,
             title: r.title,
             uploader: r.uploaderName,
@@ -144,12 +165,12 @@ export default function HomePage() {
           setQueueIndex(Math.max(0, q.findIndex((t) => t.id === id)));
         }
       } catch (e: any) {
-        setError(e.message || "Playback failed");
+        setError(e.message || "Gagal memutar");
       } finally {
         setLoading(false);
       }
     },
-    [results]
+    [results, homeResults, tab]
   );
 
   const getNextIndex = useCallback(
@@ -179,7 +200,7 @@ export default function HomePage() {
       .then((data) => {
         setCurrent({
           ...next,
-          title: data.title || next.title,
+          title: data.title && data.title !== "YouTube Track" ? data.title : next.title,
           uploader: data.uploader || next.uploader,
           thumbnail: data.thumbnail || next.thumbnail,
           duration: data.duration || next.duration,
@@ -198,7 +219,7 @@ export default function HomePage() {
       .then((data) => {
         setCurrent({
           ...prev,
-          title: data.title || prev.title,
+          title: data.title && data.title !== "YouTube Track" ? data.title : prev.title,
           uploader: data.uploader || prev.uploader,
           thumbnail: data.thumbnail || prev.thumbnail,
           duration: data.duration || prev.duration,
@@ -207,27 +228,13 @@ export default function HomePage() {
       });
   }, [queue, getNextIndex]);
 
-  useEffect(() => {
-    doSearch("lofi hip hop");
-  }, [doSearch]);
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setActiveChip(null);
     doSearch(query);
   };
 
   const playFromList = (list: Track[], index: number) => {
-    const item = list[index];
-    if (item) playTrack(item, list);
-  };
-
-  const handleCreatePlaylist = () => {
-    if (!newPlName.trim()) return;
-    createPlaylist(newPlName.trim());
-    setNewPlName("");
-    setShowCreatePl(false);
-    refreshLibrary();
+    if (list[index]) playTrack(list[index], list);
   };
 
   const openAddToPlaylist = (track: Track) => {
@@ -236,120 +243,93 @@ export default function HomePage() {
     refreshLibrary();
   };
 
-  const handleAddToPlaylist = (plId: string) => {
-    if (!trackToAdd) return;
-    addToPlaylist(plId, trackToAdd);
-    setShowAddToPl(false);
-    setTrackToAdd(null);
-    refreshLibrary();
-  };
-
-  const openPlaylist = (pl: Playlist) => {
-    setActivePlaylist(pl);
-    setLibraryView("playlist");
-  };
-
   return (
-    <div className="min-h-screen bg-[var(--bg)] pb-44">
-      {/* Header */}
-      <header className="sticky top-0 z-40 glass-strong">
-        <div className="max-w-lg mx-auto px-4 py-3 flex items-center gap-3">
-          <span className="font-bold text-[17px] tracking-tight shrink-0 text-white">Muzora</span>
-          <form onSubmit={handleSubmit} className="flex-1">
-            <div className="relative">
-              <SearchIcon size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--text3)]" />
-              <input
-                type="search"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search songs, artists..."
-                className="w-full bg-white/[0.06] border border-white/[0.06] rounded-full py-[9px] pl-10 pr-4 text-[13px] placeholder:text-[var(--text3)] focus:outline-none focus:border-white/15 focus:bg-white/[0.08] transition-colors"
-              />
-            </div>
-          </form>
-        </div>
-      </header>
-
-      <main className="max-w-lg mx-auto px-4 page-enter">
-        {error && (
-          <div className="mt-3 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-300 text-[13px]">
-            {error}
-          </div>
-        )}
-
-        {/* ========== HOME ========== */}
-        {tab === "home" && (
-          <div className="pt-5 space-y-7">
-            <div>
-              <h1 className="text-[26px] font-bold tracking-tight leading-tight">{greeting}</h1>
-              <p className="text-[var(--text3)] text-[13px] mt-1">What do you want to listen to?</p>
-            </div>
-
-            {/* Mood chips */}
-            <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-1 px-1">
-              {CHIPS.map((c) => (
-                <button
-                  key={c}
-                  onClick={() => {
-                    setActiveChip(c);
-                    setQuery(c);
-                    doSearch(c + " music");
-                  }}
-                  className={`chip flex-shrink-0 px-3.5 py-1.5 rounded-full text-[12px] font-medium bg-white/[0.07] text-white/90 ${
-                    activeChip === c ? "active" : "hover:bg-white/[0.12]"
-                  }`}
-                >
-                  {c}
-                </button>
-              ))}
-            </div>
-
-            {/* Quick picks */}
-            <section>
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="text-[17px] font-semibold tracking-tight">Quick picks</h2>
+    <div className="min-h-screen bg-black pb-36">
+      {/* ========== HOME ========== */}
+      {tab === "home" && (
+        <>
+          <header className="sticky top-0 z-40 bg-black/90 backdrop-blur-md px-4 pt-3 pb-2">
+            <div className="max-w-lg mx-auto">
+              <div className="flex items-start justify-between">
+                <div>
+                  <h1 className="text-[22px] font-bold tracking-tight leading-none">Muzora</h1>
+                  <p className="text-[13px] text-[#aaa] mt-1">{greeting}</p>
+                </div>
+                <div className="flex items-center gap-1 text-[#ccc]">
+                  <button className="p-2 opacity-70" aria-label="Notifikasi">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                      <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+                      <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+                    </svg>
+                  </button>
+                  <button className="p-2 opacity-70" aria-label="Riwayat">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                      <circle cx="12" cy="12" r="9" />
+                      <path d="M12 7v5l3 2" />
+                    </svg>
+                  </button>
+                  <button className="p-2 opacity-70" aria-label="Pengaturan">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                      <circle cx="12" cy="12" r="3" />
+                      <path d="M12 1v2M12 21v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M1 12h2M21 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4" />
+                    </svg>
+                  </button>
+                </div>
               </div>
-              {loading && results.length === 0 ? (
-                <div className="flex gap-3 overflow-hidden">
-                  {[1, 2, 3].map((i) => (
-                    <div key={i} className="w-[130px] shrink-0">
+
+              {/* Mood chips */}
+              <div className="flex gap-2 overflow-x-auto no-scrollbar mt-3 -mx-1 px-1 pb-1">
+                {MOOD_CHIPS.map((c) => (
+                  <button
+                    key={c.id}
+                    onClick={() => {
+                      setMood(c.id);
+                      if (c.id === "all") doSearch("trending indonesia music", true);
+                      else if (c.q) doSearch(c.q, true);
+                    }}
+                    className={`chip ${mood === c.id ? "chip-on" : "chip-off"}`}
+                  >
+                    {c.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </header>
+
+          <main className="max-w-lg mx-auto px-4 page-enter">
+            {error && (
+              <div className="mt-3 p-3 rounded-xl bg-red-500/10 text-red-300 text-[13px]">{error}</div>
+            )}
+
+            <p className="text-[14px] text-[#aaa] mt-4">Selamat datang kembali,</p>
+
+            <section className="mt-5">
+              <h2 className="text-[20px] font-bold tracking-tight mb-3">Pilihan cepat</h2>
+              {loading && homeResults.length === 0 ? (
+                <div className="flex gap-3">
+                  {[1, 2].map((i) => (
+                    <div key={i} className="w-[48%] shrink-0">
                       <div className="skeleton aspect-square mb-2" />
-                      <div className="skeleton h-3 w-full mb-1.5" />
+                      <div className="skeleton h-3 w-full mb-1" />
                       <div className="skeleton h-2.5 w-2/3" />
                     </div>
                   ))}
                 </div>
               ) : (
-                <div className="flex gap-3 overflow-x-auto no-scrollbar pb-1 stagger">
-                  {results.slice(0, 14).map((item) => {
+                <div className="grid grid-cols-2 gap-3">
+                  {homeResults.slice(0, 4).map((item) => {
                     const id = extractVideoId(item.url) || item.url;
                     return (
                       <button
                         key={id}
                         onClick={() => playTrack(item)}
-                        className="album-card flex-shrink-0 w-[130px] text-left group"
+                        className="album-card text-left"
                       >
-                        <div className="relative aspect-square rounded-[var(--radius)] overflow-hidden mb-2 bg-[var(--card)]">
-                          <img
-                            src={item.thumbnail}
-                            alt=""
-                            className="w-full h-full object-cover"
-                            loading="lazy"
-                          />
-                          <div className="play-overlay absolute inset-0 bg-black/45 flex items-center justify-center">
-                            <div className="w-10 h-10 rounded-full bg-[var(--primary)] flex items-center justify-center shadow-lg shadow-black/40">
-                              <svg width="18" height="18" viewBox="0 0 24 24" fill="black">
-                                <polygon points="7 4 20 12 7 20 7 4" />
-                              </svg>
-                            </div>
-                          </div>
+                        <div className="aspect-square rounded-xl overflow-hidden bg-[#1a1a1a] mb-2">
+                          <img src={item.thumbnail} alt="" className="w-full h-full object-cover" loading="lazy" />
                         </div>
-                        <p className="text-[13px] font-medium line-clamp-2 leading-snug text-white/95">
-                          {item.title}
-                        </p>
-                        <p className="text-[11px] text-[var(--text3)] mt-0.5 truncate">
-                          {item.uploaderName}
-                        </p>
+                        <p className="text-[13px] font-semibold line-clamp-2 leading-snug">{item.title}</p>
+                        <p className="text-[11px] text-[#8a8a8a] mt-0.5 truncate">{item.uploaderName}</p>
                       </button>
                     );
                   })}
@@ -357,142 +337,144 @@ export default function HomePage() {
               )}
             </section>
 
-            {/* Moods & moments */}
-            <section>
-              <h2 className="text-[17px] font-semibold tracking-tight mb-3">Moods & moments</h2>
-              <div className="grid grid-cols-2 gap-2.5 stagger">
-                {QUICK_MOODS.map((c) => (
-                  <button
-                    key={c.title}
-                    onClick={() => {
-                      setQuery(c.title);
-                      doSearch(c.title + " music");
-                    }}
-                    className="relative h-[72px] rounded-[var(--radius)] overflow-hidden text-left px-4 flex items-center active:scale-[0.98] transition-transform"
-                    style={{ background: `linear-gradient(135deg, ${c.color}cc, ${c.color}88)` }}
-                  >
-                    <span className="font-semibold text-[14px] relative z-10 drop-shadow-sm">
-                      {c.title}
-                    </span>
-                    <div
-                      className="absolute -right-3 -bottom-4 w-16 h-16 rounded-lg opacity-30 rotate-12"
-                      style={{ background: "rgba(255,255,255,0.35)" }}
-                    />
-                  </button>
-                ))}
+            <section className="mt-7">
+              <h2 className="text-[20px] font-bold tracking-tight mb-3">Playlist trending</h2>
+              <div className="flex gap-3 overflow-x-auto no-scrollbar pb-1">
+                {homeResults.slice(4, 12).map((item) => {
+                  const id = extractVideoId(item.url) || item.url;
+                  return (
+                    <button
+                      key={id}
+                      onClick={() => playTrack(item)}
+                      className="album-card flex-shrink-0 w-[120px] text-left"
+                    >
+                      <div className="aspect-square rounded-xl overflow-hidden bg-[#1a1a1a] mb-2">
+                        <img src={item.thumbnail} alt="" className="w-full h-full object-cover" loading="lazy" />
+                      </div>
+                      <p className="text-[12px] font-medium line-clamp-2 leading-snug">{item.title}</p>
+                      <p className="text-[11px] text-[#8a8a8a] mt-0.5 truncate">{item.uploaderName}</p>
+                    </button>
+                  );
+                })}
               </div>
             </section>
 
-            {/* Recently played preview on home */}
             {history.length > 0 && (
-              <section>
-                <h2 className="text-[17px] font-semibold tracking-tight mb-3">Recently played</h2>
-                <div className="space-y-0.5">
-                  {history.slice(0, 5).map((t, i) => (
+              <section className="mt-7 mb-4">
+                <h2 className="text-[20px] font-bold tracking-tight mb-3">Baru diputar</h2>
+                <div className="space-y-1">
+                  {history.slice(0, 6).map((t, i) => (
                     <button
                       key={t.id + i}
                       onClick={() => playFromList(history, i)}
-                      className={`song-row w-full flex items-center gap-3 p-2 text-left ${
-                        current?.id === t.id ? "bg-[var(--primary-soft)]" : ""
-                      }`}
+                      className="w-full flex items-center gap-3 p-1.5 rounded-lg text-left active:bg-white/5"
                     >
-                      <img src={t.thumbnail} alt="" className="w-11 h-11 rounded-md object-cover" />
+                      <img src={t.thumbnail} alt="" className="w-12 h-12 rounded-lg object-cover" />
                       <div className="min-w-0 flex-1">
-                        <p className={`text-[13px] font-medium truncate ${current?.id === t.id ? "text-[var(--primary)]" : ""}`}>
+                        <p className={`text-[13px] font-medium truncate ${current?.id === t.id ? "text-[var(--accent)]" : ""}`}>
                           {t.title}
                         </p>
-                        <p className="text-[11px] text-[var(--text3)] truncate">{t.uploader}</p>
+                        <p className="text-[11px] text-[#8a8a8a] truncate">{t.uploader}</p>
                       </div>
                     </button>
                   ))}
                 </div>
               </section>
             )}
-          </div>
-        )}
+          </main>
+        </>
+      )}
 
-        {/* ========== SEARCH ========== */}
-        {tab === "search" && (
-          <div className="pt-5">
-            <h2 className="text-[17px] font-semibold tracking-tight mb-4">
-              {query ? (
-                <>Results for <span className="text-[var(--primary)]">“{query}”</span></>
-              ) : (
-                "Search"
-              )}
-            </h2>
+      {/* ========== SEARCH ========== */}
+      {tab === "search" && (
+        <main className="max-w-lg mx-auto px-4 pt-4 page-enter">
+          <form onSubmit={handleSubmit} className="mb-6">
+            <div className="relative">
+              <SearchIcon size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#888]" />
+              <input
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search for artis..."
+                className="w-full bg-[#1c1c1c] rounded-full py-3 pl-11 pr-4 text-[14px] placeholder:text-[#777] focus:outline-none focus:ring-1 focus:ring-white/15"
+              />
+            </div>
+          </form>
 
-            {loading ? (
-              <div className="space-y-2">
-                {[1, 2, 3, 4, 5, 6].map((i) => (
-                  <div key={i} className="flex items-center gap-3 p-2">
-                    <div className="skeleton w-12 h-12 rounded-md shrink-0" />
-                    <div className="flex-1">
-                      <div className="skeleton h-3 w-3/4 mb-2" />
-                      <div className="skeleton h-2.5 w-1/2" />
-                    </div>
-                  </div>
+          {!query && results.length === 0 && !loading ? (
+            <>
+              <div className="text-center mb-5">
+                <h2 className="text-[18px] font-bold">Semua yang anda butuhkan</h2>
+                <p className="text-[13px] text-[#888] mt-1">
+                  Cari untuk lagu, artis, album, daftar putar, dan lainnya
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                {CATEGORIES.map((c) => (
+                  <button
+                    key={c.title}
+                    onClick={() => {
+                      setQuery(c.title);
+                      doSearch(c.q);
+                    }}
+                    className="relative h-[88px] rounded-xl overflow-hidden text-left px-3.5 pt-3 active:scale-[0.98] transition-transform"
+                    style={{ background: c.color }}
+                  >
+                    <span className="font-bold text-[15px] text-white drop-shadow">{c.title}</span>
+                    <div className="absolute right-2 bottom-2 w-10 h-10 rounded-md bg-black/20 rotate-12" />
+                  </button>
                 ))}
               </div>
-            ) : results.length === 0 ? (
-              <div className="flex flex-col items-center py-16 text-[var(--text3)]">
-                <SearchIcon size={36} className="mb-3 opacity-40" />
-                <p className="text-[14px]">No results</p>
-                <p className="text-[12px] mt-1">Try another keyword</p>
-              </div>
-            ) : (
-              <div className="space-y-0.5 stagger">
+            </>
+          ) : loading ? (
+            <div className="space-y-2">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <div key={i} className="flex gap-3 p-2">
+                  <div className="skeleton w-12 h-12 rounded-md" />
+                  <div className="flex-1">
+                    <div className="skeleton h-3 w-3/4 mb-2" />
+                    <div className="skeleton h-2.5 w-1/2" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <>
+              <h2 className="text-[16px] font-semibold mb-3">
+                Hasil untuk <span className="text-[var(--accent)]">&quot;{query}&quot;</span>
+              </h2>
+              <div className="space-y-0.5">
                 {results.map((item) => {
                   const id = extractVideoId(item.url) || item.url;
-                  const isActive = current?.id === id;
-                  const trackObj: Track = {
-                    id,
-                    title: item.title,
-                    uploader: item.uploaderName,
-                    thumbnail: item.thumbnail,
-                    duration: item.duration,
-                  };
+                  const active = current?.id === id;
                   return (
-                    <div
-                      key={id}
-                      className={`song-row flex items-center gap-3 p-2 ${
-                        isActive ? "bg-[var(--primary-soft)]" : ""
-                      }`}
-                    >
+                    <div key={id} className="flex items-center gap-2">
                       <button
                         onClick={() => playTrack(item)}
-                        className="flex items-center gap-3 min-w-0 flex-1 text-left"
+                        className={`flex-1 flex items-center gap-3 p-2 rounded-lg text-left ${active ? "bg-[var(--accent-soft)]" : "active:bg-white/5"}`}
                       >
-                        <div className="relative shrink-0">
-                          <img
-                            src={item.thumbnail}
-                            alt=""
-                            className="w-12 h-12 rounded-md object-cover"
-                          />
-                          {isActive && (
-                            <div className="absolute inset-0 bg-black/40 rounded-md flex items-center justify-center">
-                              <div className="w-1.5 h-1.5 rounded-full bg-[var(--primary)] animate-pulse" />
-                            </div>
-                          )}
-                        </div>
+                        <img src={item.thumbnail} alt="" className="w-12 h-12 rounded-md object-cover" />
                         <div className="min-w-0 flex-1">
-                          <p
-                            className={`text-[13px] font-medium truncate ${
-                              isActive ? "text-[var(--primary)]" : "text-white/95"
-                            }`}
-                          >
+                          <p className={`text-[13px] font-medium truncate ${active ? "text-[var(--accent)]" : ""}`}>
                             {item.title}
                           </p>
-                          <p className="text-[11px] text-[var(--text3)] truncate mt-0.5">
+                          <p className="text-[11px] text-[#8a8a8a] truncate">
                             {item.uploaderName}
                             {item.duration ? ` · ${formatDuration(item.duration)}` : ""}
                           </p>
                         </div>
                       </button>
                       <button
-                        onClick={() => openAddToPlaylist(trackObj)}
-                        className="p-2 text-[var(--text3)] hover:text-white shrink-0"
-                        title="Add to playlist"
+                        onClick={() =>
+                          openAddToPlaylist({
+                            id,
+                            title: item.title,
+                            uploader: item.uploaderName,
+                            thumbnail: item.thumbnail,
+                            duration: item.duration,
+                          })
+                        }
+                        className="p-2 text-[#777]"
                       >
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                           <path d="M12 5v14M5 12h14" />
@@ -502,283 +484,268 @@ export default function HomePage() {
                   );
                 })}
               </div>
-            )}
-          </div>
-        )}
-
-        {/* ========== LIBRARY ========== */}
-        {tab === "library" && libraryView === "main" && (
-          <div className="pt-5 space-y-7 page-enter">
-            <div className="flex items-center justify-between">
-              <h1 className="text-[26px] font-bold tracking-tight">Library</h1>
-              <button
-                onClick={() => setShowCreatePl(true)}
-                className="text-[13px] font-medium text-[var(--primary)] px-3 py-1.5 rounded-full bg-[var(--primary-soft)]"
-              >
-                + Playlist
-              </button>
-            </div>
-
-            <section>
-              <h2 className="text-[15px] font-semibold mb-2.5 text-white/90">Playlists</h2>
-              {playlists.length === 0 ? (
-                <p className="text-[13px] text-[var(--text3)]">No playlists yet</p>
-              ) : (
-                <div className="space-y-1">
-                  {playlists.map((pl) => (
-                    <button
-                      key={pl.id}
-                      onClick={() => openPlaylist(pl)}
-                      className="song-row w-full flex items-center gap-3 p-2 text-left"
-                    >
-                      <div className="w-12 h-12 rounded-md bg-[var(--card)] overflow-hidden shrink-0 flex items-center justify-center">
-                        {pl.tracks[0] ? (
-                          <img src={pl.tracks[0].thumbnail} alt="" className="w-full h-full object-cover" />
-                        ) : (
-                          <MusicIcon size={20} className="text-[var(--text3)]" />
-                        )}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-[13px] font-medium truncate">{pl.name}</p>
-                        <p className="text-[11px] text-[var(--text3)]">{pl.tracks.length} songs</p>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </section>
-
-            <section>
-              <h2 className="text-[15px] font-semibold mb-2.5 flex items-center gap-2 text-white/90">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="#1ed760">
-                  <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
-                </svg>
-                Liked Songs
-              </h2>
-              {liked.length === 0 ? (
-                <p className="text-[13px] text-[var(--text3)]">Songs you like appear here</p>
-              ) : (
-                <div className="space-y-0.5">
-                  {liked.slice(0, 8).map((t, i) => (
-                    <button
-                      key={t.id}
-                      onClick={() => playFromList(liked, i)}
-                      className={`song-row w-full flex items-center gap-3 p-2 text-left ${
-                        current?.id === t.id ? "bg-[var(--primary-soft)]" : ""
-                      }`}
-                    >
-                      <img src={t.thumbnail} alt="" className="w-11 h-11 rounded-md object-cover" />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-[13px] font-medium truncate">{t.title}</p>
-                        <p className="text-[11px] text-[var(--text3)] truncate">{t.uploader}</p>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </section>
-
-            <section>
-              <h2 className="text-[15px] font-semibold mb-2.5 text-white/90">Recently played</h2>
-              {history.length === 0 ? (
-                <p className="text-[13px] text-[var(--text3)]">History will appear here</p>
-              ) : (
-                <div className="space-y-0.5">
-                  {history.slice(0, 12).map((t, i) => (
-                    <button
-                      key={t.id + i}
-                      onClick={() => playFromList(history, i)}
-                      className={`song-row w-full flex items-center gap-3 p-2 text-left ${
-                        current?.id === t.id ? "bg-[var(--primary-soft)]" : ""
-                      }`}
-                    >
-                      <img src={t.thumbnail} alt="" className="w-11 h-11 rounded-md object-cover" />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-[13px] font-medium truncate">{t.title}</p>
-                        <p className="text-[11px] text-[var(--text3)] truncate">{t.uploader}</p>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </section>
-          </div>
-        )}
-
-        {/* Playlist detail */}
-        {tab === "library" && libraryView === "playlist" && activePlaylist && (
-          <div className="pt-5 page-enter">
-            <button
-              onClick={() => {
-                setLibraryView("main");
-                setActivePlaylist(null);
-              }}
-              className="text-[13px] text-[var(--text3)] mb-4 flex items-center gap-1"
-            >
-              ← Back
-            </button>
-            <div className="flex items-center gap-4 mb-6">
-              <div className="w-24 h-24 rounded-[var(--radius)] bg-[var(--card)] overflow-hidden shrink-0">
-                {activePlaylist.tracks[0] ? (
-                  <img src={activePlaylist.tracks[0].thumbnail} alt="" className="w-full h-full object-cover" />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center">
-                    <MusicIcon size={28} className="text-[var(--text3)]" />
-                  </div>
-                )}
-              </div>
-              <div>
-                <h1 className="text-[20px] font-bold tracking-tight">{activePlaylist.name}</h1>
-                <p className="text-[13px] text-[var(--text3)] mt-0.5">{activePlaylist.tracks.length} songs</p>
-                {activePlaylist.tracks.length > 0 && (
-                  <button
-                    onClick={() => playFromList(activePlaylist.tracks, 0)}
-                    className="mt-2.5 px-4 py-1.5 rounded-full bg-[var(--primary)] text-black text-[13px] font-semibold"
-                  >
-                    Play all
-                  </button>
-                )}
-              </div>
-            </div>
-            {activePlaylist.tracks.length === 0 ? (
-              <p className="text-[13px] text-[var(--text3)]">Empty playlist. Add songs from Search.</p>
-            ) : (
-              <div className="space-y-0.5">
-                {activePlaylist.tracks.map((t, i) => (
-                  <div key={t.id} className="flex items-center gap-1">
-                    <button
-                      onClick={() => playFromList(activePlaylist.tracks, i)}
-                      className={`song-row flex-1 flex items-center gap-3 p-2 text-left ${
-                        current?.id === t.id ? "bg-[var(--primary-soft)]" : ""
-                      }`}
-                    >
-                      <span className="text-[11px] text-[var(--text3)] w-5 text-center">{i + 1}</span>
-                      <img src={t.thumbnail} alt="" className="w-10 h-10 rounded-md object-cover" />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-[13px] font-medium truncate">{t.title}</p>
-                        <p className="text-[11px] text-[var(--text3)] truncate">{t.uploader}</p>
-                      </div>
-                    </button>
-                    <button
-                      onClick={() => {
-                        removeFromPlaylist(activePlaylist.id, t.id);
-                        const updated = getPlaylists().find((p) => p.id === activePlaylist.id);
-                        if (updated) setActivePlaylist(updated);
-                        refreshLibrary();
-                      }}
-                      className="p-2 text-[var(--text3)] hover:text-red-400"
-                    >
-                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                      </svg>
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-            <button
-              onClick={() => {
-                if (confirm("Delete this playlist?")) {
-                  deletePlaylist(activePlaylist.id);
-                  setLibraryView("main");
-                  setActivePlaylist(null);
-                  refreshLibrary();
-                }
-              }}
-              className="mt-8 text-[13px] text-red-400/80"
-            >
-              Delete playlist
-            </button>
-          </div>
-        )}
-      </main>
-
-      {/* Create playlist modal */}
-      {showCreatePl && (
-        <div className="fixed inset-0 z-[110] bg-black/75 flex items-center justify-center p-4" onClick={() => setShowCreatePl(false)}>
-          <div className="w-full max-w-sm rounded-2xl glass-strong p-5 scale-in" onClick={(e) => e.stopPropagation()} style={{ animation: "scaleIn 0.2s ease" }}>
-            <h3 className="font-semibold text-[16px] mb-4">New playlist</h3>
-            <input
-              autoFocus
-              value={newPlName}
-              onChange={(e) => setNewPlName(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleCreatePlaylist()}
-              placeholder="Playlist name"
-              className="w-full bg-white/[0.06] border border-white/10 rounded-xl px-4 py-3 text-[14px] mb-4 focus:outline-none focus:border-[var(--primary)]/40"
-            />
-            <div className="flex gap-2 justify-end">
-              <button onClick={() => setShowCreatePl(false)} className="px-4 py-2 text-[13px] text-[var(--text3)]">
-                Cancel
-              </button>
-              <button onClick={handleCreatePlaylist} className="px-5 py-2 rounded-full bg-[var(--primary)] text-black text-[13px] font-semibold">
-                Create
-              </button>
-            </div>
-          </div>
-        </div>
+            </>
+          )}
+        </main>
       )}
 
-      {/* Add to playlist */}
-      {showAddToPl && trackToAdd && (
-        <div className="fixed inset-0 z-[110] bg-black/75 flex items-end sm:items-center justify-center" onClick={() => setShowAddToPl(false)}>
-          <div className="w-full max-w-md rounded-t-2xl sm:rounded-2xl glass-strong max-h-[70vh] overflow-hidden" onClick={(e) => e.stopPropagation()}>
-            <div className="p-4 border-b border-white/[0.06]">
-              <h3 className="font-semibold text-[15px]">Add to playlist</h3>
-              <p className="text-[12px] text-[var(--text3)] mt-0.5 truncate">{trackToAdd.title}</p>
+      {/* ========== LIBRARY / KOLEKSI ========== */}
+      {tab === "library" && libraryView === "main" && (
+        <main className="max-w-lg mx-auto px-4 pt-4 page-enter">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="w-8 h-8 rounded-full bg-[#ff9800] flex items-center justify-center text-[12px] font-bold text-black">
+              M
             </div>
-            <div className="overflow-y-auto max-h-[45vh] p-2">
-              {playlists.length === 0 ? (
-                <p className="text-center text-[var(--text3)] text-[13px] py-8">No playlists yet</p>
+            <h1 className="text-[22px] font-bold">Koleksi</h1>
+          </div>
+
+          <div className="flex gap-2 overflow-x-auto no-scrollbar mb-5">
+            {["Daftar Playlist Anda", "Daftar Putar Lokal", "Daftar Favorit"].map((label, i) => (
+              <button
+                key={label}
+                onClick={() => setLibTab(i)}
+                className={`chip ${libTab === i ? "chip-on" : "chip-off"}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {libTab === 0 && (
+            <div className="grid grid-cols-3 gap-3">
+              <button
+                onClick={() => setShowCreatePl(true)}
+                className="aspect-square rounded-xl bg-gradient-to-br from-[#cfd8dc] to-[#90a4ae] flex flex-col items-center justify-center text-black/70"
+              >
+                <span className="text-[36px] leading-none font-light">+</span>
+                <span className="text-[12px] mt-1 font-medium">Membuat</span>
+              </button>
+              {playlists.map((pl) => (
+                <button
+                  key={pl.id}
+                  onClick={() => {
+                    setActivePlaylist(pl);
+                    setLibraryView("playlist");
+                  }}
+                  className="text-left"
+                >
+                  <div className="aspect-square rounded-xl overflow-hidden bg-[#1a1a1a] mb-1.5">
+                    {pl.tracks[0] ? (
+                      <img src={pl.tracks[0].thumbnail} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <MusicIcon size={24} className="text-[#555]" />
+                      </div>
+                    )}
+                  </div>
+                  <p className="text-[12px] font-medium truncate">{pl.name}</p>
+                  <p className="text-[11px] text-[#888]">Kamu</p>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {libTab === 1 && (
+            <div className="space-y-1">
+              {history.length === 0 ? (
+                <p className="text-[13px] text-[#888] py-8 text-center">Belum ada riwayat</p>
               ) : (
-                playlists.map((pl) => (
+                history.map((t, i) => (
                   <button
-                    key={pl.id}
-                    onClick={() => handleAddToPlaylist(pl.id)}
-                    className="song-row w-full flex items-center gap-3 p-3 text-left"
+                    key={t.id + i}
+                    onClick={() => playFromList(history, i)}
+                    className="w-full flex items-center gap-3 p-2 text-left rounded-lg active:bg-white/5"
                   >
-                    <div className="w-11 h-11 rounded-md bg-[var(--card)] overflow-hidden shrink-0">
-                      {pl.tracks[0] ? (
-                        <img src={pl.tracks[0].thumbnail} alt="" className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center">
-                          <MusicIcon size={16} className="text-[var(--text3)]" />
-                        </div>
-                      )}
-                    </div>
-                    <div>
-                      <p className="text-[13px] font-medium">{pl.name}</p>
-                      <p className="text-[11px] text-[var(--text3)]">{pl.tracks.length} songs</p>
+                    <img src={t.thumbnail} alt="" className="w-12 h-12 rounded-lg object-cover" />
+                    <div className="min-w-0">
+                      <p className="text-[13px] font-medium truncate">{t.title}</p>
+                      <p className="text-[11px] text-[#888] truncate">{t.uploader}</p>
                     </div>
                   </button>
                 ))
               )}
             </div>
-            <div className="p-3 border-t border-white/[0.06]">
+          )}
+
+          {libTab === 2 && (
+            <div className="space-y-1">
+              {liked.length === 0 ? (
+                <p className="text-[13px] text-[#888] py-8 text-center">Belum ada favorit</p>
+              ) : (
+                liked.map((t, i) => (
+                  <button
+                    key={t.id}
+                    onClick={() => playFromList(liked, i)}
+                    className="w-full flex items-center gap-3 p-2 text-left rounded-lg active:bg-white/5"
+                  >
+                    <img src={t.thumbnail} alt="" className="w-12 h-12 rounded-lg object-cover" />
+                    <div className="min-w-0">
+                      <p className="text-[13px] font-medium truncate">{t.title}</p>
+                      <p className="text-[11px] text-[#888] truncate">{t.uploader}</p>
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
+          )}
+        </main>
+      )}
+
+      {tab === "library" && libraryView === "playlist" && activePlaylist && (
+        <main className="max-w-lg mx-auto px-4 pt-4 page-enter">
+          <button
+            onClick={() => {
+              setLibraryView("main");
+              setActivePlaylist(null);
+            }}
+            className="text-[13px] text-[#aaa] mb-4"
+          >
+            ← Kembali
+          </button>
+          <div className="flex gap-4 mb-5">
+            <div className="w-24 h-24 rounded-xl overflow-hidden bg-[#1a1a1a] shrink-0">
+              {activePlaylist.tracks[0] ? (
+                <img src={activePlaylist.tracks[0].thumbnail} alt="" className="w-full h-full object-cover" />
+              ) : null}
+            </div>
+            <div>
+              <h1 className="text-[18px] font-bold">{activePlaylist.name}</h1>
+              <p className="text-[12px] text-[#888] mt-1">{activePlaylist.tracks.length} lagu</p>
+              {activePlaylist.tracks.length > 0 && (
+                <button
+                  onClick={() => playFromList(activePlaylist.tracks, 0)}
+                  className="mt-2 px-4 py-1.5 rounded-full bg-[var(--accent)] text-black text-[13px] font-semibold"
+                >
+                  Putar semua
+                </button>
+              )}
+            </div>
+          </div>
+          <div className="space-y-1">
+            {activePlaylist.tracks.map((t, i) => (
+              <div key={t.id} className="flex items-center gap-1">
+                <button
+                  onClick={() => playFromList(activePlaylist.tracks, i)}
+                  className="flex-1 flex items-center gap-3 p-2 text-left"
+                >
+                  <span className="text-[11px] text-[#666] w-4">{i + 1}</span>
+                  <img src={t.thumbnail} alt="" className="w-10 h-10 rounded object-cover" />
+                  <div className="min-w-0">
+                    <p className="text-[13px] font-medium truncate">{t.title}</p>
+                    <p className="text-[11px] text-[#888] truncate">{t.uploader}</p>
+                  </div>
+                </button>
+                <button
+                  onClick={() => {
+                    removeFromPlaylist(activePlaylist.id, t.id);
+                    const u = getPlaylists().find((p) => p.id === activePlaylist.id);
+                    if (u) setActivePlaylist(u);
+                    refreshLibrary();
+                  }}
+                  className="p-2 text-[#666]"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+          <button
+            onClick={() => {
+              if (confirm("Hapus playlist?")) {
+                deletePlaylist(activePlaylist.id);
+                setLibraryView("main");
+                setActivePlaylist(null);
+                refreshLibrary();
+              }
+            }}
+            className="mt-6 text-[13px] text-red-400"
+          >
+            Hapus playlist
+          </button>
+        </main>
+      )}
+
+      {/* Modals */}
+      {showCreatePl && (
+        <div className="fixed inset-0 z-[110] bg-black/80 flex items-center justify-center p-4" onClick={() => setShowCreatePl(false)}>
+          <div className="w-full max-w-sm rounded-2xl bg-[#1a1a1a] p-5" onClick={(e) => e.stopPropagation()}>
+            <h3 className="font-semibold text-[16px] mb-4">Playlist baru</h3>
+            <input
+              autoFocus
+              value={newPlName}
+              onChange={(e) => setNewPlName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && newPlName.trim()) {
+                  createPlaylist(newPlName.trim());
+                  setNewPlName("");
+                  setShowCreatePl(false);
+                  refreshLibrary();
+                }
+              }}
+              placeholder="Nama playlist"
+              className="w-full bg-[#2a2a2a] rounded-xl px-4 py-3 text-[14px] mb-4 focus:outline-none"
+            />
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setShowCreatePl(false)} className="px-4 py-2 text-[13px] text-[#888]">
+                Batal
+              </button>
               <button
                 onClick={() => {
-                  setShowAddToPl(false);
-                  setShowCreatePl(true);
+                  if (!newPlName.trim()) return;
+                  createPlaylist(newPlName.trim());
+                  setNewPlName("");
+                  setShowCreatePl(false);
+                  refreshLibrary();
                 }}
-                className="w-full py-2.5 rounded-xl text-[13px] text-[var(--primary)] font-medium"
+                className="px-5 py-2 rounded-full bg-[var(--accent)] text-black text-[13px] font-semibold"
               >
-                + Create new playlist
+                Buat
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Queue */}
+      {showAddToPl && trackToAdd && (
+        <div className="fixed inset-0 z-[110] bg-black/80 flex items-end justify-center" onClick={() => setShowAddToPl(false)}>
+          <div className="w-full max-w-lg rounded-t-2xl bg-[#1a1a1a] max-h-[70vh]" onClick={(e) => e.stopPropagation()}>
+            <div className="p-4 border-b border-white/5">
+              <h3 className="font-semibold">Tambah ke playlist</h3>
+              <p className="text-[12px] text-[#888] truncate">{trackToAdd.title}</p>
+            </div>
+            <div className="overflow-y-auto max-h-[45vh] p-2">
+              {playlists.map((pl) => (
+                <button
+                  key={pl.id}
+                  onClick={() => {
+                    addToPlaylist(pl.id, trackToAdd);
+                    setShowAddToPl(false);
+                    setTrackToAdd(null);
+                    refreshLibrary();
+                  }}
+                  className="w-full flex items-center gap-3 p-3 text-left rounded-lg active:bg-white/5"
+                >
+                  <div className="w-11 h-11 rounded-md bg-[#2a2a2a] overflow-hidden">
+                    {pl.tracks[0] && <img src={pl.tracks[0].thumbnail} alt="" className="w-full h-full object-cover" />}
+                  </div>
+                  <div>
+                    <p className="text-[13px] font-medium">{pl.name}</p>
+                    <p className="text-[11px] text-[#888]">{pl.tracks.length} lagu</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {showQueue && (
         <div className="fixed inset-0 z-[90] bg-black/70" onClick={() => setShowQueue(false)}>
-          <div
-            className="absolute bottom-0 left-0 right-0 max-h-[70vh] rounded-t-2xl glass-strong overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="p-4 border-b border-white/[0.06] flex items-center justify-between">
-              <h3 className="font-semibold text-[15px]">Queue · {queue.length}</h3>
-              <button onClick={() => setShowQueue(false)} className="text-[13px] text-[var(--text3)]">
-                Close
+          <div className="absolute bottom-0 left-0 right-0 max-h-[70vh] rounded-t-2xl bg-[#1a1a1a]" onClick={(e) => e.stopPropagation()}>
+            <div className="p-4 border-b border-white/5 flex justify-between">
+              <h3 className="font-semibold">Antrian · {queue.length}</h3>
+              <button onClick={() => setShowQueue(false)} className="text-[13px] text-[#888]">
+                Tutup
               </button>
             </div>
             <div className="overflow-y-auto max-h-[55vh] p-2">
@@ -790,17 +757,12 @@ export default function HomePage() {
                     playTrack(t, queue);
                     setShowQueue(false);
                   }}
-                  className={`song-row w-full flex items-center gap-3 p-2.5 text-left ${
-                    i === queueIndex ? "bg-[var(--primary-soft)]" : ""
-                  }`}
+                  className={`w-full flex items-center gap-3 p-2.5 text-left rounded-lg ${i === queueIndex ? "bg-[var(--accent-soft)]" : ""}`}
                 >
-                  <span className="text-[11px] text-[var(--text3)] w-5">{i + 1}</span>
-                  <img src={t.thumbnail} alt="" className="w-10 h-10 rounded-md object-cover" />
-                  <div className="min-w-0 flex-1">
-                    <p className={`text-[13px] truncate ${i === queueIndex ? "text-[var(--primary)]" : ""}`}>
-                      {t.title}
-                    </p>
-                    <p className="text-[11px] text-[var(--text3)] truncate">{t.uploader}</p>
+                  <img src={t.thumbnail} alt="" className="w-10 h-10 rounded object-cover" />
+                  <div className="min-w-0">
+                    <p className={`text-[13px] truncate ${i === queueIndex ? "text-[var(--accent)]" : ""}`}>{t.title}</p>
+                    <p className="text-[11px] text-[#888] truncate">{t.uploader}</p>
                   </div>
                 </button>
               ))}
@@ -824,15 +786,15 @@ export default function HomePage() {
         onAddToPlaylist={current ? () => openAddToPlaylist(current) : undefined}
       />
 
-      {/* Bottom nav — expanding pill like SimpMusic */}
+      {/* Bottom nav — SimpMusic style floating + expanding */}
       <nav className="fixed bottom-0 left-0 right-0 z-40 safe-bottom pointer-events-none">
-        <div className="max-w-lg mx-auto px-4 pb-3 pt-1 pointer-events-auto">
-          <div className="flex items-center justify-between h-[58px] px-2 rounded-[28px] glass-strong shadow-[0_-4px_24px_rgba(0,0,0,0.35)] border border-white/[0.06]">
+        <div className="max-w-lg mx-auto px-3 pb-2.5 pt-1 pointer-events-auto">
+          <div className="flex items-center h-[56px] px-1.5 rounded-[28px] bg-[#1c1c1e]/95 backdrop-blur-xl border border-white/[0.06] shadow-2xl">
             {(
               [
-                { id: "home" as Tab, label: "Home", Icon: HomeIcon },
-                { id: "search" as Tab, label: "Search", Icon: SearchIcon },
-                { id: "library" as Tab, label: "Library", Icon: CompassIcon },
+                { id: "home" as Tab, label: "Beranda", Icon: HomeIcon },
+                { id: "library" as Tab, label: "Koleksi", Icon: LibraryIcon },
+                { id: "search" as Tab, label: "Cari", Icon: SearchIcon },
               ] as const
             ).map(({ id, label, Icon }) => {
               const active = tab === id;
@@ -842,22 +804,17 @@ export default function HomePage() {
                   onClick={() => {
                     setTab(id);
                     setLibraryView("main");
-                    if (id === "search" && !results.length) doSearch("trending music");
                   }}
-                  className={`relative flex items-center justify-center gap-2 h-[42px] rounded-full transition-all duration-300 ease-out ${
+                  className={`flex-1 flex items-center justify-center gap-1.5 h-[42px] rounded-full mx-0.5 transition-all duration-300 ${
                     active
-                      ? "bg-[var(--primary)] text-black px-5 min-w-[110px] shadow-lg shadow-[var(--primary)]/25"
-                      : "text-[var(--text3)] px-4 min-w-[56px] hover:text-white"
+                      ? "bg-[#2c2c2e] text-[var(--accent)] px-3"
+                      : "text-[#888]"
                   }`}
                 >
                   <Icon size={22} filled={active} />
-                  <span
-                    className={`text-[12px] font-semibold whitespace-nowrap overflow-hidden transition-all duration-300 ${
-                      active ? "max-w-[60px] opacity-100" : "max-w-0 opacity-0 w-0"
-                    }`}
-                  >
-                    {label}
-                  </span>
+                  {active && (
+                    <span className="text-[12px] font-semibold">{label}</span>
+                  )}
                 </button>
               );
             })}
