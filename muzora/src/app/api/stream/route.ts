@@ -9,21 +9,26 @@ export async function GET(req: NextRequest) {
   const videoId = extractVideoId(idOrUrl) || idOrUrl;
   try {
     const info = await getStream(videoId);
-    // Prefer highest bitrate audio that is m4a or webm
-    const audio = (info.audioStreams || [])
-      .filter((s) => s.mimeType?.includes("audio"))
-      .sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0))[0];
-
     return NextResponse.json({
       title: info.title,
       uploader: info.uploader,
-      thumbnail: info.thumbnailUrl,
+      thumbnail: info.thumbnail,
       duration: info.duration,
-      audioUrl: audio?.url || null,
-      related: (info.relatedStreams || []).slice(0, 12),
+      audioUrl: info.audioUrl, // can be null → client uses YouTube embed
+      videoId: info.videoId,
+      related: info.related || [],
     });
   } catch (e: any) {
     console.error(e);
-    return NextResponse.json({ error: e.message || "Stream failed" }, { status: 500 });
+    // Even on total failure, return videoId so embed can still work
+    return NextResponse.json({
+      title: "YouTube Track",
+      uploader: "",
+      thumbnail: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+      duration: 0,
+      audioUrl: null,
+      videoId,
+      related: [],
+    });
   }
 }

@@ -120,7 +120,7 @@ export default function HomePage() {
       try {
         const res = await fetch(`/api/stream?id=${encodeURIComponent(id)}`);
         const data = await res.json();
-        if (data.error || !data.audioUrl) throw new Error(data.error || "No audio");
+        if (data.error && !data.videoId) throw new Error(data.error || "Playback failed");
         const track: Track = {
           id,
           title: data.title || ("title" in item ? item.title : ""),
@@ -179,16 +179,14 @@ export default function HomePage() {
     fetch(`/api/stream?id=${encodeURIComponent(next.id)}`)
       .then((r) => r.json())
       .then((data) => {
-        if (data.audioUrl) {
-          setCurrent({
+        setCurrent({
             ...next,
             title: data.title || next.title,
             uploader: data.uploader || next.uploader,
             thumbnail: data.thumbnail || next.thumbnail,
             duration: data.duration || next.duration,
-            audioUrl: data.audioUrl,
+            audioUrl: data.audioUrl || null,
           });
-        }
       });
   }, [queue, queueIndex, getNextIndex, repeat]);
 
@@ -200,16 +198,14 @@ export default function HomePage() {
     fetch(`/api/stream?id=${encodeURIComponent(prev.id)}`)
       .then((r) => r.json())
       .then((data) => {
-        if (data.audioUrl) {
-          setCurrent({
+        setCurrent({
             ...prev,
             title: data.title || prev.title,
             uploader: data.uploader || prev.uploader,
             thumbnail: data.thumbnail || prev.thumbnail,
             duration: data.duration || prev.duration,
-            audioUrl: data.audioUrl,
+            audioUrl: data.audioUrl || null,
           });
-        }
       });
   }, [queue, getNextIndex]);
 

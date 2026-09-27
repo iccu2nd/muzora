@@ -1,55 +1,45 @@
-// Piped instances (public YouTube API proxies)
-// Updated with currently working instances
+// Music data layer — Piped primary, YouTube embed fallback for playback
 const PIPED_INSTANCES = [
   "https://api.piped.private.coffee",
   "https://pipedapi.ducks.party",
   "https://pipedapi.kavin.rocks",
   "https://pipedapi.adminforge.de",
   "https://pipedapi.leptons.xyz",
-  "https://pipedapi.reallyaweso.me",
-  "https://pipedapi.nosebs.ru",
-  "https://api.piped.yt",
 ];
 
 let currentInstance = 0;
 
-async function fetchWithFallback(path: string, retries = 6): Promise<any> {
+async function fetchPiped(path: string): Promise<any | null> {
   const errors: string[] = [];
-  const start = currentInstance;
-
-  for (let i = 0; i < Math.min(retries, PIPED_INSTANCES.length); i++) {
-    const idx = (start + i) % PIPED_INSTANCES.length;
+  for (let i = 0; i < PIPED_INSTANCES.length; i++) {
+    const idx = (currentInstance + i) % PIPED_INSTANCES.length;
     const base = PIPED_INSTANCES[idx];
     try {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 8000);
-
+      const t = setTimeout(() => controller.abort(), 7000);
       const res = await fetch(`${base}${path}`, {
-        headers: {
-          Accept: "application/json",
-          "User-Agent": "Muzora/1.0",
-        },
+        headers: { Accept: "application/json", "User-Agent": "Muzora/1.0" },
         signal: controller.signal,
-        next: { revalidate: 30 },
+        cache: "no-store",
       });
-      clearTimeout(timeout);
-
+      clearTimeout(t);
       if (!res.ok) {
-        errors.push(`${base}: HTTP ${res.status}`);
+        errors.push(`${base}→${res.status}`);
         continue;
       }
-
       const data = await res.json();
-      // success — remember this instance for next time
+      if (data?.message && String(data.message).includes("LOGIN_REQUIRED")) {
+        errors.push(`${base}→LOGIN_REQUIRED`);
+        continue;
+      }
       currentInstance = idx;
       return data;
     } catch (e: any) {
-      errors.push(`${base}: ${e.name === "AbortError" ? "timeout" : e.message}`);
+      errors.push(`${base}→${e.name === "AbortError" ? "timeout" : "err"}`);
     }
   }
-
-  console.error("All Piped instances failed:", errors);
-  throw new Error("All Piped instances failed. Coba lagi nanti.");
+  console.warn("Piped failed:", errors.join(", "));
+  return null;
 }
 
 export interface SearchItem {
@@ -65,51 +55,66 @@ export interface SearchItem {
   isShort?: boolean;
 }
 
-export interface StreamInfo {
+export interface StreamResult {
   title: string;
-  description: string;
-  uploadDate: string;
   uploader: string;
-  uploaderUrl: string;
-  uploaderAvatar: string;
-  thumbnailUrl: string;
-  hls: string | null;
-  dash: string | null;
+  thumbnail: string;
   duration: number;
-  views: number;
-  likes: number;
-  category: string;
-  relatedStreams: SearchItem[];
-  audioStreams: {
-    url: string;
-    format: string;
-    quality: string;
-    mimeType: string;
-    codec: string;
-    bitrate: number;
-    contentLength: number;
-  }[];
-  videoStreams: any[];
-  subtitles: any[];
-  livestream: boolean;
+  audioUrl: string | null; // null = use YouTube embed fallback
+  videoId: string;
+  related: SearchItem[];
 }
 
 export async function search(query: string, filter = "music_songs"): Promise<SearchItem[]> {
-  const data = await fetchWithFallback(
-    `/search?q=${encodeURIComponent(query)}&filter=${filter}`
-  );
+  const data = await fetchPiped(`/search?q=${encodeURIComponent(query)}&filter=${filter}`);
+  if (!data) {
+    // last resort: try without music filter
+    const data2 = await fetchPiped(`/search?q=${encodeURIComponent(query)}&filter=all`);
+    if (!data2) throw new Error("Search gagal. Semua server sedang sibuk, coba lagi.");
+    return (data2.items || []).filter(
+      (i: any) => i.type === "stream" || (i.url && String(i.url).includes("/watch"))
+    );
+  }
   return (data.items || []).filter(
-    (i: any) => i.type === "stream" || (i.url && i.url.includes("/watch"))
+    (i: any) => i.type === "stream" || (i.url && String(i.url).includes("/watch"))
   );
 }
 
-export async function getStream(videoId: string): Promise<StreamInfo> {
-  return fetchWithFallback(`/streams/${videoId}`);
+export async function getStream(videoId: string): Promise<StreamResult> {
+  const data = await fetchPiped(`/streams/${videoId}`);
+
+  if (data && (data.audioStreams?.length || data.title)) {
+    const audio = (data.audioStreams || [])
+      .filter((s: any) => s.mimeType?.includes("audio") || s.format?.includes("m4a") || s.format?.includes("webm"))
+      .sort((a: any, b: any) => (b.bitrate || 0) - (a.bitrate || 0))[0];
+
+    return {
+      title: data.title || "Unknown",
+      uploader: data.uploader || "Unknown",
+      thumbnail: data.thumbnailUrl || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+      duration: data.duration || 0,
+      audioUrl: audio?.url || null,
+      videoId,
+      related: (data.relatedStreams || []).slice(0, 12),
+    };
+  }
+
+  // Fallback: no direct audio stream available (YouTube blocking)
+  // Return metadata only — player will use YouTube embed
+  return {
+    title: data?.title || "YouTube Track",
+    uploader: data?.uploader || "",
+    thumbnail: data?.thumbnailUrl || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+    duration: data?.duration || 0,
+    audioUrl: null,
+    videoId,
+    related: (data?.relatedStreams || []).slice(0, 12),
+  };
 }
 
 export function extractVideoId(url: string): string | null {
   if (!url) return null;
-  if (url.length === 11 && !url.includes("/")) return url;
+  if (url.length === 11 && !/[^0-9A-Za-z_-]/.test(url)) return url;
   const match = url.match(/(?:v=|\/)([0-9A-Za-z_-]{11})/);
   return match ? match[1] : null;
 }
